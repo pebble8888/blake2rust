@@ -1,15 +1,15 @@
-pub const BLAKE2B_BLOCKBYTES: usize = 128;
-pub const BLAKE2B_KEYBYTES: usize = 64;
-pub const BLAKE2B_OUTBYTES: usize = 64;
-pub const BLAKE2B_SALTBYTES: usize = 16;
-pub const BLAKE2B_PERSONALBYTES: usize = 16;
+pub const BLOCKBYTES: usize = 128;
+pub const KEYBYTES: usize = 64;
+pub const OUTBYTES: usize = 64;
+pub const SALTBYTES: usize = 16;
+pub const PERSONALBYTES: usize = 16;
 
 #[derive(Copy, Clone)]
 pub struct Blake2bState {
     pub h: [u64; 8],
     pub t: [u64; 2],
     pub f: [u64; 2],
-    pub buf: [u8; BLAKE2B_BLOCKBYTES],
+    pub buf: [u8; BLOCKBYTES],
     pub buflen: usize,
     pub outlen: usize,
     pub last_node: u8,
@@ -26,8 +26,8 @@ pub struct Blake2bParam {
     pub node_depth: u8,
     pub inner_length: u8,
     pub reserved: [u8; 14],
-    pub salt: [u8; BLAKE2B_SALTBYTES],
-    pub personal: [u8; BLAKE2B_PERSONALBYTES],
+    pub salt: [u8; SALTBYTES],
+    pub personal: [u8; PERSONALBYTES],
 }
 
 impl Blake2bParam {
@@ -69,7 +69,7 @@ impl Blake2bParam {
 
 pub fn blake2b_init_param(s: &mut Blake2bState, p: &Blake2bParam) -> bool
 {
-    for i in 0..(BLAKE2B_OUTBYTES/8) {
+    for i in 0..(OUTBYTES/8) {
         s.h[i] = BLAKE2B_IV[i] ^ p.to_u64(i);
     }
     s.outlen = p.digest_length as usize;
@@ -82,7 +82,7 @@ pub fn blake2b_update(s: &mut Blake2bState, pin: &[u8], a_inlen: usize) -> bool
     let mut j = 0;
     if inlen > 0 {
         let left = s.buflen;
-        let fill = BLAKE2B_BLOCKBYTES - left;
+        let fill = BLOCKBYTES - left;
         if inlen > fill {
             s.buflen = 0;
 
@@ -90,16 +90,16 @@ pub fn blake2b_update(s: &mut Blake2bState, pin: &[u8], a_inlen: usize) -> bool
                 s.buf[left+i] = pin[j+i];
             }
 
-            blake2b_increment_counter(&mut s.t, BLAKE2B_BLOCKBYTES as u64);
+            blake2b_increment_counter(&mut s.t, BLOCKBYTES as u64);
             blake2b_compress(&mut s.h, &s.t, &s.f, &s.buf);
 
             j = j + fill;
             inlen = inlen - fill;
-            while inlen > BLAKE2B_BLOCKBYTES {
-                blake2b_increment_counter(&mut s.t, BLAKE2B_BLOCKBYTES as u64);
-                blake2b_compress(&mut s.h, &s.t, &s.f, &pin[j..j+BLAKE2B_BLOCKBYTES]);
-                j = j + BLAKE2B_BLOCKBYTES;
-                inlen = inlen - BLAKE2B_BLOCKBYTES;
+            while inlen > BLOCKBYTES {
+                blake2b_increment_counter(&mut s.t, BLOCKBYTES as u64);
+                blake2b_compress(&mut s.h, &s.t, &s.f, &pin[j..j+BLOCKBYTES]);
+                j = j + BLOCKBYTES;
+                inlen = inlen - BLOCKBYTES;
             }
         }
 
@@ -114,7 +114,7 @@ pub fn blake2b_update(s: &mut Blake2bState, pin: &[u8], a_inlen: usize) -> bool
 
 pub fn blake2b_final(s: &mut Blake2bState, out: &mut[u8], outlen: usize) -> bool
 {
-    let mut buffer = [0; BLAKE2B_OUTBYTES];
+    let mut buffer = [0; OUTBYTES];
 
     if outlen < s.outlen {
         return false;
@@ -126,7 +126,7 @@ pub fn blake2b_final(s: &mut Blake2bState, out: &mut[u8], outlen: usize) -> bool
     blake2b_increment_counter(&mut s.t, s.buflen as u64);
     blake2b_set_lastblock(s);
     // padding
-    let len = BLAKE2B_BLOCKBYTES - s.buflen;
+    let len = BLOCKBYTES - s.buflen;
     for i in 0..len {
         s.buf[s.buflen+i] = 0;
     }
@@ -140,7 +140,7 @@ pub fn blake2b_final(s: &mut Blake2bState, out: &mut[u8], outlen: usize) -> bool
     for i in 0..(s.outlen) {
         out[i] = buffer[i];
     }
-    for i in 0..BLAKE2B_OUTBYTES {
+    for i in 0..OUTBYTES {
         buffer[i] = 0;
     }
     return true;
