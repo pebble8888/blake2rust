@@ -1,4 +1,10 @@
-use super::blake2b;
+//use super::blake2b;
+use super::blake2b::{BLOCKBYTES, KEYBYTES, OUTBYTES, SALTBYTES, PERSONALBYTES};
+use super::blake2b::{Blake2bState, Blake2bParam};
+use super::blake2b::blake2b_init_param;
+use super::blake2b::blake2b_update;
+use super::blake2b::blake2b_final;
+use super::blake2b::secure_zero_memory;
 
 pub const PARALLELISM_DEGREE: usize = 4;
 pub const KAT_LENGTH: usize = 256;
@@ -10,32 +16,32 @@ pub fn blake2bp(outbuf: &mut[u8],
                 key: &[u8],
                 keylen: usize) -> bool 
 {
-    let mut hash = [[0u8; blake2b::OUTBYTES]; PARALLELISM_DEGREE];
-    let mut s = [blake2b::Blake2bState {
+    let mut hash = [[0u8; OUTBYTES]; PARALLELISM_DEGREE];
+    let mut s = [Blake2bState {
                     h: [0u64; 8],
                     t: [0u64; 2],
                     f: [0u64; 2],
-                    buf: [0u8; blake2b::BLOCKBYTES],
+                    buf: [0u8; BLOCKBYTES],
                     buflen: 0,
                     outlen: 0,
                     last_node: 0,
                  };
                  PARALLELISM_DEGREE];
 
-    let mut fs = blake2b::Blake2bState {
+    let mut fs = Blake2bState {
         h: [0u64; 8],
         t: [0u64; 2],
         f: [0u64; 2],
-        buf: [0u8; blake2b::BLOCKBYTES],
+        buf: [0u8; BLOCKBYTES],
         buflen: 0,
         outlen: 0,
         last_node: 0,
     };
 
-    if outlen == 0 || outlen > blake2b::OUTBYTES {
+    if outlen == 0 || outlen > OUTBYTES {
         return false;
     }
-    if keylen > blake2b::KEYBYTES {
+    if keylen > KEYBYTES {
         return false;
     }
     for i in 0..PARALLELISM_DEGREE {
@@ -47,37 +53,37 @@ pub fn blake2bp(outbuf: &mut[u8],
     s[PARALLELISM_DEGREE - 1].last_node = 1; /* mark last node */
 
     if keylen > 0 {
-        let mut block = [0u8; blake2b::BLOCKBYTES];
+        let mut block = [0u8; BLOCKBYTES];
         for i in 0..keylen {
             block[i] = key[i];
         }
         for i in 0..PARALLELISM_DEGREE {
-            blake2b::blake2b_update(&mut s[i], &block, blake2b::BLOCKBYTES);
+            blake2b_update(&mut s[i], &block, BLOCKBYTES);
         }
-        blake2b::secure_zero_memory(&mut block, blake2b::BLOCKBYTES); /* Burn the key from stack */
+        secure_zero_memory(&mut block, BLOCKBYTES); /* Burn the key from stack */
     }
     for i in 0..PARALLELISM_DEGREE {
         let mut inlen__: usize = inlen;
         let mut j = 0;
-        j = j + i * blake2b::BLOCKBYTES;
-        while inlen__ >= PARALLELISM_DEGREE * blake2b::BLOCKBYTES {
-            blake2b::blake2b_update(&mut s[i], &inbuf[j..(j+blake2b::BLOCKBYTES)], blake2b::BLOCKBYTES);
+        j = j + i * BLOCKBYTES;
+        while inlen__ >= PARALLELISM_DEGREE * BLOCKBYTES {
+            blake2b_update(&mut s[i], &inbuf[j..(j+BLOCKBYTES)], BLOCKBYTES);
 
-            j += PARALLELISM_DEGREE * blake2b::BLOCKBYTES;
-            inlen__ -= PARALLELISM_DEGREE * blake2b::BLOCKBYTES;
+            j += PARALLELISM_DEGREE * BLOCKBYTES;
+            inlen__ -= PARALLELISM_DEGREE * BLOCKBYTES;
         }
 
-        if inlen__ > i * blake2b::BLOCKBYTES {
-            let left: usize = inlen__ - i * blake2b::BLOCKBYTES;
+        if inlen__ > i * BLOCKBYTES {
+            let left: usize = inlen__ - i * BLOCKBYTES;
             let len: usize;
-            if left <= blake2b::BLOCKBYTES {
+            if left <= BLOCKBYTES {
                 len = left;
             } else {
-                len = blake2b::BLOCKBYTES;
+                len = BLOCKBYTES;
             }
-            blake2b::blake2b_update(&mut s[i], &inbuf[j..(j+len)], len); 
+            blake2b_update(&mut s[i], &inbuf[j..(j+len)], len); 
         }
-        blake2b::blake2b_final(&mut s[i], &mut hash[i], blake2b::OUTBYTES);
+        blake2b_final(&mut s[i], &mut hash[i], OUTBYTES);
     }
 
     if !blake2bp_init_root(&mut fs, outlen, keylen) {
@@ -87,15 +93,15 @@ pub fn blake2bp(outbuf: &mut[u8],
     fs.last_node = 1; /* Mark as last node */
 
     for i in 0..PARALLELISM_DEGREE {
-        blake2b::blake2b_update(&mut fs, &mut hash[i], blake2b::OUTBYTES);
+        blake2b_update(&mut fs, &mut hash[i], OUTBYTES);
     }
 
-    blake2b::blake2b_final(&mut fs, outbuf, outlen)
+    blake2b_final(&mut fs, outbuf, outlen)
 }
 
-fn blake2bp_init_root(s: &mut blake2b::Blake2bState, outlen: usize, keylen: usize) -> bool
+fn blake2bp_init_root(s: &mut Blake2bState, outlen: usize, keylen: usize) -> bool
 {
-    let p = blake2b::Blake2bParam {
+    let p = Blake2bParam {
         digest_length: outlen as u8,
         key_length: keylen as u8,
         fanout: PARALLELISM_DEGREE as u8,
@@ -104,18 +110,18 @@ fn blake2bp_init_root(s: &mut blake2b::Blake2bState, outlen: usize, keylen: usiz
         node_offset: 0,
         xof_length: 0,
         node_depth: 1,
-        inner_length: blake2b::OUTBYTES as u8,
+        inner_length: OUTBYTES as u8,
         reserved: [0; 14],
-        salt: [0; blake2b::SALTBYTES],
-        personal: [0; blake2b::PERSONALBYTES], 
+        salt: [0; SALTBYTES],
+        personal: [0; PERSONALBYTES], 
     };
-    let result = blake2b::blake2b_init_param(s, &p);
+    let result = blake2b_init_param(s, &p);
     result
 }
 
-fn blake2bp_init_leaf(s: &mut blake2b::Blake2bState, outlen: usize, keylen: usize, offset: u64) -> bool
+fn blake2bp_init_leaf(s: &mut Blake2bState, outlen: usize, keylen: usize, offset: u64) -> bool
 {
-    let p = blake2b::Blake2bParam {
+    let p = Blake2bParam {
         digest_length: outlen as u8,
         key_length: keylen as u8,
         fanout: PARALLELISM_DEGREE as u8,
@@ -124,22 +130,22 @@ fn blake2bp_init_leaf(s: &mut blake2b::Blake2bState, outlen: usize, keylen: usiz
         node_offset: offset as u32,
         xof_length: 0,
         node_depth: 0,
-        inner_length: blake2b::OUTBYTES as u8,
+        inner_length: OUTBYTES as u8,
         reserved: [0; 14],
-        salt: [0; blake2b::SALTBYTES],
-        personal: [0; blake2b::PERSONALBYTES], 
+        salt: [0; SALTBYTES],
+        personal: [0; PERSONALBYTES], 
     };
     blake2bp_init_leaf_param(s, &p)
 }
 
-fn blake2bp_init_leaf_param(s: &mut blake2b::Blake2bState, p: &blake2b::Blake2bParam) -> bool
+fn blake2bp_init_leaf_param(s: &mut Blake2bState, p: &Blake2bParam) -> bool
 {
-    let err = blake2b::blake2b_init_param(s, &p);
+    let err = blake2b_init_param(s, &p);
     s.outlen = p.inner_length as usize;
     err
 }
 
-pub const BLAKE2BP_KEYED_KAT: [[u8; blake2b::OUTBYTES]; KAT_LENGTH] = 
+pub const BLAKE2BP_KEYED_KAT: [[u8; OUTBYTES]; KAT_LENGTH] = 
 [
 	[
 		0x9D, 0x94, 0x61, 0x07, 0x3E, 0x4E, 0xB6, 0x40,
